@@ -96,11 +96,15 @@
     {
         $drill_type = 2;
         $data["score"] = array();
-        $max_score = -99999;
-        $min_score = 99999;
+        // Initialize max/min score with the first data point, then iterate
+        $first_score = $rows[0]['score'];
+        $max_score = $first_score;
+        $min_score = $first_score;
+        
         foreach ($rows as $row) {
             $data["timestamp"][] = $row['timestamp'];
             $data["score"][] = $row['score'];
+            
             if($row['score'] > $max_score)
             {
                 $max_score = $row['score'];
