@@ -9,38 +9,62 @@
     if(!isset($_SESSION['username']))
     {
         header('Location: /home/');
+        die();
     }
+    
+    $username = $_SESSION['username'];
+    $user_id = null;
+    $user_has_results = false;
+    $latest_drill = null;
+    $completed_drills = array();
 
-    $sql = "SELECT `id` FROM `users` WHERE `users`.`username` = '" . $_SESSION['username'] . "';";
-    $result = mysqli_query($conn, $sql);
-    $row = mysqli_fetch_assoc($result);
-    $user_id = $row['id'];
-    $sql = "SELECT `drill_id`, `timestamp` FROM `drill_results` WHERE `drill_results`.`user_id` = '" . $user_id . "' ORDER BY `timestamp` DESC;";
-    $drill_results = mysqli_query($conn, $sql);
-    if (mysqli_num_rows($drill_results) > 0)
-    {
-        $user_has_results = true;
-        $first_row = true;
-        $completed_drills = array();
-        while ($row = mysqli_fetch_assoc($drill_results))
-        {
-            if ($first_row)
-            {
-                $first_row = false;
-                $latest_drill = $row;
-                $sql = "SELECT `name` FROM `drills` WHERE `drills`.`drill_id` = '" . $latest_drill['drill_id'] . "';";
-                $latest_drill['name'] = mysqli_fetch_assoc(mysqli_query($conn, $sql))['name'];
-                $latest_drill['date_string'] = get_timestamp_in_english($latest_drill['timestamp']);        
-            }
-            if (!in_array(intval($row['drill_id']), $completed_drills))
-            {
-                array_push($completed_drills, intval($row['drill_id']));
-            }
-        }
+    // 1. Fetch User ID (Secure)
+    $stmt = $conn->prepare("SELECT `id` FROM `users` WHERE `username` = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows == 1) {
+        $user_id = $result->fetch_assoc()['id'];
     }
-    else
+    $stmt->close();
+    
+    if ($user_id)
     {
-        $user_has_results = false;
+        // 2. Fetch all drill results for this user (Secure)
+        $stmt_drills = $conn->prepare("SELECT `drill_id`, `timestamp` FROM `drill_results` WHERE `user_id` = ? ORDER BY `timestamp` DESC");
+        $stmt_drills->bind_param("i", $user_id);
+        $stmt_drills->execute();
+        $drill_results = $stmt_drills->get_result();
+        
+        if ($drill_results->num_rows > 0)
+        {
+            $user_has_results = true;
+            $rows = $drill_results->fetch_all(MYSQLI_ASSOC);
+            
+            // Set latest drill (first row)
+            $latest_drill = $rows[0];
+            
+            // Get all unique completed drill IDs
+            foreach ($rows as $row) {
+                $drill_id_int = intval($row['drill_id']);
+                if (!in_array($drill_id_int, $completed_drills))
+                {
+                    array_push($completed_drills, $drill_id_int);
+                }
+            }
+            
+            // Fetch latest drill name (Secure)
+            $latest_drill_id = $latest_drill['drill_id'];
+            $stmt_name = $conn->prepare("SELECT `name` FROM `drills` WHERE `drill_id` = ?");
+            $stmt_name->bind_param("i", $latest_drill_id);
+            $stmt_name->execute();
+            $latest_drill['name'] = $stmt_name->get_result()->fetch_assoc()['name'];
+            $stmt_name->close();
+
+            $latest_drill['date_string'] = get_timestamp_in_english($latest_drill['timestamp']);        
+        }
+        $stmt_drills->close();
     }
 ?>
 
@@ -67,19 +91,36 @@
             </div>
             <form class="accounts-form" action="/home/index.php " method="post">
                 <div class="input-group">
-                    <h3>Hello, <?php echo $_SESSION['username']; ?>!</h3>
+                    <h3>Hello, <?php echo htmlspecialchars($username); ?>!</h3>
                     <?php if($user_has_results): ?>
                         <p>
-                            The last drill you completed was <b>Drill #<?php echo $latest_drill['drill_id'] . " - " . $latest_drill['name']; ?></b> on <?php echo $latest_drill['date_string']; ?>.
+                            The last drill you completed was <b>Drill #<?php echo htmlspecialchars($latest_drill['drill_id']) . " - " . htmlspecialchars($latest_drill['name']); ?></b> on <?php echo htmlspecialchars($latest_drill['date_string']); ?>.
                         </p>
                         <p>
                             <b>Your completed drills:</b>
+                            <?php 
+                                // Fetch names for all completed drills efficiently
+                                $drill_names = [];
+                                if (!empty($completed_drills)) {
+                                    $in_clause = implode(',', array_fill(0, count($completed_drills), '?'));
+                                    $stmt_completed_names = $conn->prepare("SELECT `drill_id`, `name` FROM `drills` WHERE `drill_id` IN ({$in_clause})");
+                                    $types = str_repeat('i', count($completed_drills));
+                                    $stmt_completed_names->bind_param($types, ...$completed_drills);
+                                    $stmt_completed_names->execute();
+                                    $result_completed_names = $stmt_completed_names->get_result();
+                                    while ($row = $result_completed_names->fetch_assoc()) {
+                                        $drill_names[$row['drill_id']] = $row['name'];
+                                    }
+                                    $stmt_completed_names->close();
+                                }
+                            ?>
+
                             <?php foreach ($completed_drills as $drill_id): ?>
                                 
-                                <?php $sql = "SELECT `name` FROM `drills` WHERE `drill_id` = " . $drill_id . ";"; ?>
-                                <?php $drill_name = mysqli_fetch_assoc(mysqli_query($conn, $sql))['name']; ?>
-                                <p><a href="/home/drills/drill_results.php?drill_num=<?php echo $drill_id; ?>" class="drill_results_link">
-                                    <?php echo "Drill #" . $drill_id . " - " . $drill_name; ?>
+                                <?php $drill_name = $drill_names[$drill_id] ?? 'Unknown Drill'; ?>
+
+                                <p><a href="/home/drills/drill_results.php?drill_num=<?php echo htmlspecialchars($drill_id); ?>" class="drill_results_link">
+                                    <?php echo "Drill #" . htmlspecialchars($drill_id) . " - " . htmlspecialchars($drill_name); ?>
                                 </a></p>
                             <?php endforeach; ?>
                         </p>

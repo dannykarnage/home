@@ -9,39 +9,68 @@
     if(!isset($_SESSION['username']))
     {
         header('Location: /home/');
+        die();
     }
 
     //if the drill number (drill_id) is not set, redirect back to the accounts page
-    if(!isset($_GET['drill_num']))
+    if(!isset($_GET['drill_num']) || !is_numeric($_GET['drill_num']))
     {
         header('Location: /home/accounts');
+        die();
     }
 
     $drill_id = $_GET['drill_num'];
+    $username = $_SESSION['username'];
+    $user_id = null;
+    $drill_results = null;
 
-    $sql = "SELECT `id` FROM `users` WHERE `users`.`username` = '" . $_SESSION['username'] . "';";
-    $result = mysqli_query($conn, $sql);
-    if(!$result)
+    // 1. Fetch User ID (Secure)
+    $stmt_user = $conn->prepare("SELECT `id` FROM `users` WHERE `username` = ?");
+    $stmt_user->bind_param("s", $username);
+    $stmt_user->execute();
+    $result_user = $stmt_user->get_result();
+    
+    if($result_user->num_rows == 1)
+    {
+        $user_id = $result_user->fetch_assoc()['id'];
+    }
+    else
     {
         //means the username has no user_id. Log the user out
         header('Location: /home/accounts/logout.php');
+        die();
     }
-    $user_id = mysqli_fetch_assoc($result)['id'];
+    $stmt_user->close();
 
-    $sql = "SELECT * FROM `drill_results` WHERE `drill_results`.`user_id` = " . $user_id . " AND `drill_results`.`drill_id` = " . $drill_id . " ORDER BY `drill_results`.`timestamp` ASC;";
-    $drill_results = mysqli_query($conn, $sql);
-    if(!$drill_results || mysqli_num_rows($drill_results) === 0)
-    {
-        //means that the query failed. Redirect back to the accounts page.
-        header('Location: /home/accounts');
-    }
+    // 2. Fetch Drill Results (Secure)
+    $stmt_results = $conn->prepare("SELECT `pass`, `score`, `timestamp` FROM `drill_results` WHERE `user_id` = ? AND `drill_id` = ? ORDER BY `timestamp` ASC");
+    $stmt_results->bind_param("ii", $user_id, $drill_id);
+    $stmt_results->execute();
+    $drill_results = $stmt_results->get_result();
 
-    $sql = "SELECT * FROM `drills` WHERE `drills`.`drill_id` = " . $drill_id . ";";
-    $drill_detail_results = mysqli_query($conn, $sql);
-    if(!$drill_detail_results || mysqli_num_rows($drill_detail_results) <> 1)
+    if(!$drill_results || $drill_results->num_rows === 0)
+    {
+        //means that the query failed or no results found. Redirect back to the accounts page.
+        header('Location: /home/accounts');
+        die();
+    }
+    $rows = $drill_results->fetch_all(MYSQLI_ASSOC);
+    $stmt_results->close();
+
+
+    // 3. Fetch Drill Details (Secure)
+    $stmt_details = $conn->prepare("SELECT * FROM `drills` WHERE `drill_id` = ?");
+    $stmt_details->bind_param("i", $drill_id);
+    $stmt_details->execute();
+    $drill_detail_results = $stmt_details->get_result();
+    
+    if(!$drill_detail_results || $drill_detail_results->num_rows != 1)
     {
         header('Location: /home/accounts');
+        die();
     }
+    $drill_details = $drill_detail_results->fetch_assoc();
+    $stmt_details->close();
 
     //drill types
     // 1 = pass/fail only
@@ -52,59 +81,43 @@
     $data = array(
         "timestamp" => array()
     );
-    $drill_details = mysqli_fetch_assoc($drill_detail_results);
-    //deterimine the drill type
+    
+    // Deterimine the drill type and populate $data array
     if ($drill_details['pass_fail'] && !$drill_details['out_of'])
     {
         $drill_type = 1;
         $data["pass"] = array();
-        $i = 0;
-        while ($row = mysqli_fetch_assoc($drill_results))
-        {
-            $data["timestamp"][$i] = $row['timestamp'];
-            if ($row['pass'])
-            {
-                $data["pass"][$i] = "Pass";
-            }
-            else
-            {
-                $data["pass"][$i] = "Fail";
-            }
-            $i++;
+        foreach ($rows as $row) {
+            $data["timestamp"][] = $row['timestamp'];
+            $data["pass"][] = $row['pass'] ? "Pass" : "Fail";
         }
     }
     elseif ($drill_details['score'] && !$drill_details['out_of'])
     {
         $drill_type = 2;
         $data["score"] = array();
-        $i = 0;
         $max_score = -99999;
         $min_score = 99999;
-        while ($row = mysqli_fetch_assoc($drill_results))
-        {
-            $data["timestamp"][$i] = $row['timestamp'];
-            $data["score"][$i] = $row['score'];
-            if($data["score"][$i] > $max_score)
+        foreach ($rows as $row) {
+            $data["timestamp"][] = $row['timestamp'];
+            $data["score"][] = $row['score'];
+            if($row['score'] > $max_score)
             {
-                $max_score = $data["score"][$i];
+                $max_score = $row['score'];
             }
-            if($data["score"][$i] < $min_score)
+            if($row['score'] < $min_score)
             {
-                $min_score = $data["score"][$i];
+                $min_score = $row['score'];
             }
-            $i++;
         }
     }
     elseif ($drill_details['score'] && $drill_details['out_of'] && !$drill_details['pass_fail'])
     {
         $drill_type = 3;
         $data["score"] = array();
-        $i = 0;
-        while ($row = mysqli_fetch_assoc($drill_results))
-        {
-            $data["timestamp"][$i] = $row['timestamp'];
-            $data["score"][$i] = $row['score'];
-            $i++;
+        foreach ($rows as $row) {
+            $data["timestamp"][] = $row['timestamp'];
+            $data["score"][] = $row['score'];
         }
     }
     elseif ($drill_details['score'] && $drill_details['out_of'] && $drill_details['pass_fail'])
@@ -112,25 +125,17 @@
         $drill_type = 4;
         $data["score"] = array();
         $data["pass"] = array();
-        $i = 0;
-        while ($row = mysqli_fetch_assoc($drill_results))
-        {
-            $data["timestamp"][$i] = $row['timestamp'];
-            $data["score"][$i] = $row['score'];
-            if ($row['pass'])
-            {
-                $data["pass"][$i] = "Pass";
-            }
-            else
-            {
-                $data["pass"][$i] = "Fail";
-            }
-            $i++;
+        foreach ($rows as $row) {
+            $data["timestamp"][] = $row['timestamp'];
+            $data["score"][] = $row['score'];
+            $data["pass"][] = $row['pass'] ? "Pass" : "Fail";
         }
     }
     else
     {
-        header('Location : /home/accounts');
+        // Fallback for drill type issue
+        header('Location: /home/accounts');
+        die();
     }
 ?>
 <!DOCTYPE html>
@@ -138,7 +143,7 @@
 <html>
     <head>
         <title>
-            My Account - Pool Practice Tracker
+            History for Drill #<?php echo htmlspecialchars($drill_id); ?> - Pool Practice Tracker
         </title>
         <link rel="stylesheet" type="text/css" href="/home/styles/general.css">
         <link rel="stylesheet" type="text/css" href="/home/styles/header.css">
@@ -150,7 +155,7 @@
 
         <main class="main-section">
             <div class="history-header">
-                <h4>History of Drill #<?php echo $drill_id; ?> for <?php echo $_SESSION['username']; ?></h4>
+                <h4>History of Drill #<?php echo htmlspecialchars($drill_id); ?> for <?php echo htmlspecialchars($username); ?></h4>
             </div>
 
             <?php include('/home/users/web/b2283/ipg.stinttrackercom/home/drills/type' . $drill_type . '_drill_html.php'); ?>

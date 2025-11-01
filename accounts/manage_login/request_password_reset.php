@@ -15,30 +15,34 @@
     elseif($_SERVER['REQUEST_METHOD'] == "POST")
     {
         //something was posted
+        // No need for mysqli_real_escape_string anymore
         $username = trim($_POST['username']);
-        $username = mysqli_real_escape_string($conn, $username);
 
         if(!empty($username))
         {
-            $sql = "SELECT * FROM `users` WHERE `users`.`username` = '$username';";
-            $result = mysqli_query($conn, $sql);
+            // Fetch user details (Secure)
+            $stmt = $conn->prepare("SELECT `email` FROM `users` WHERE `username` = ? AND `verified` = 1");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+            $result = $stmt->get_result();
 
             if ($result)
             {
-                if (mysqli_num_rows($result) != 1)
+                if ($result->num_rows != 1)
                 {
-                    $error_message = "Could not find that username on file. Please try again.";
+                    $error_message = "Could not find that username on file or the account is not verified. Please try again.";
                 }
                 else
                 {
-                    $user_data = mysqli_fetch_assoc($result);
+                    $user_data = $result->fetch_assoc();
                     $email = $user_data['email'];
                 }
             }
             else
             {
                 $error_message = "Database error. Please try again later.";
-            }            
+            }    
+            $stmt->close();        
         }
         else
         {
@@ -48,9 +52,14 @@
 
         if(empty($error_message))
         {
-            $pkey = md5(time() . $username);
-            $sql = "UPDATE `users` SET `users`.`pkey` = '$pkey', `users`.`password_reset_request_timestamp` = CURRENT_TIMESTAMP WHERE `users`.`username` = '$username' LIMIT 1;";
-            $result = mysqli_query($conn, $sql);
+            $pkey = md5(time() . $username); // pkey is used as a temporary non-user-supplied key
+            
+            // Update pkey and timestamp (Secure)
+            $stmt = $conn->prepare("UPDATE `users` SET `pkey` = ?, `password_reset_request_timestamp` = CURRENT_TIMESTAMP WHERE `username` = ? LIMIT 1");
+            $stmt->bind_param("ss", $pkey, $username);
+            $result = $stmt->execute();
+            $stmt->close();
+            
             if ($result)
             {
                 //send email
@@ -60,11 +69,13 @@
                 $headers .= "MIME-Version: 1.0" . "\r\n";
                 $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
                 
+                // Note: It's important to check the mail function's return value for success
                 $success = mail($email,$subject,$email_message,$headers);
 
                 if ($success)
                 {
                     header("Location: /home/accounts/manage_login/password_reset_requested.php");
+                    die();
                 }
                 else
                 {
@@ -73,7 +84,7 @@
             }
             else
             {
-                $error_message = "Database error during request. Please try again later.";
+                $error_message = "Database error during request. Please try again later. Error: " . $conn->error;
             }        
         }
     }
@@ -98,7 +109,7 @@
             <form class="user-form" action="/home/accounts/manage_login/request_password_reset.php " method="post">
                 <?php if(!empty($error_message)): ?>
                     <div style="width: 92%; margin: 0px auto; padding: 10px; border: 1px solid #a94442; color: #a94442; background: #f2dede; border-radius: 5px; text-align: left;">
-                        <p><?php echo $error_message; ?></p>
+                        <p><?php echo htmlspecialchars($error_message); ?></p>
                     </div>
                 <?php endif; ?>
                 <div class="input-group"> <!--this isn't an input, but the input-group style works fine -->
@@ -108,7 +119,7 @@
                 <div><br></div>
                 <div class="input-group">
                     <label for="">Username</label>
-                    <input id="text" type="text" name="username">
+                    <input id="text" type="text" name="username" value="<?php echo htmlspecialchars($username ?? ''); ?>">
                 </div>
                 <div class="input-group">
                     <button id="button" type="submit" value="submit" name="submit" class="user-form-btn" style="cursor: pointer;">Submit</button>
@@ -123,5 +134,3 @@
 
     </body>
 </html>
-
-

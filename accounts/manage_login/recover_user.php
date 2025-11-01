@@ -5,6 +5,7 @@
     //include('/home/users/web/b2283/ipg.stinttrackercom/home/functions.php');
     include('/home/users/web/b2283/ipg.stinttrackercom/home/db_files/connection.php');
     $error_message = "";
+    $email = "";
 
     //determine if a user is already logged in and, if so, redirect to the homepage
     $user_already_logged_in = !empty($_SESSION['username']);
@@ -15,21 +16,26 @@
     elseif($_SERVER['REQUEST_METHOD'] == "POST")
     {
         $email = trim($_POST['email']);
-        $email = mysqli_real_escape_string($conn, $email);
+        $username = null;
         
         if(!empty($email))
         {
-            $sql = "SELECT `username` FROM `users` WHERE `users`.`email` = '$email';";
-            $result = mysqli_query($conn, $sql);
+            // Fetch username by email (Secure)
+            $stmt = $conn->prepare("SELECT `username` FROM `users` WHERE `email` = ?");
+            $stmt->bind_param("s", $email);
+            $stmt->execute();
+            $result = $stmt->get_result();
 
             if ($result)
             {
-                $row = mysqli_fetch_assoc($result);
-                $username = $row['username'];
+                if ($result->num_rows == 1) {
+                    $row = $result->fetch_assoc();
+                    $username = $row['username'];
+                }
+                // If 0 rows are found, we continue to the success page for security reasons (don't reveal valid emails)
                 
                 if (!empty($username))
                 {
-
                     //send email
                     $subject = "Username request";
                     include('/home/users/web/b2283/ipg.stinttrackercom/home/accounts/manage_login/recover_username_email.php');
@@ -45,12 +51,15 @@
                     }
                 }
 
+                // Always redirect to the same page to prevent user enumeration
                 header("Location: /home/accounts/manage_login/username_requested.php");
+                die();
             }
             else
             {
-                $error_message = "A problem occurred while trying to locate that email address. Please try again.";
+                $error_message = "A problem occurred while trying to locate that email address. Please try again. Error: " . $conn->error;
             }
+            $stmt->close();
         }
         else
         {
@@ -83,7 +92,7 @@
             <form class="user-form" action="/home/accounts/manage_login/recover_user.php " method="post">
                 <?php if(!empty($error_message)): ?>
                     <div style="width: 92%; margin: 0px auto; padding: 10px; border: 1px solid #a94442; color: #a94442; background: #f2dede; border-radius: 5px; text-align: left;">
-                        <p><?php echo $error_message; ?></p>
+                        <p><?php echo htmlspecialchars($error_message); ?></p>
                     </div>
                 <?php endif; ?>
                 <div class="input-group"> <!--this isn't an input, but the input-group style works fine -->
@@ -93,7 +102,7 @@
                 <div><br></div>
                 <div class="input-group">
                     <label for="">Email address</label>
-                    <input id="text" type="text" name="email">
+                    <input id="text" type="text" name="email" value="<?php echo htmlspecialchars($email); ?>">
                 </div>
                 <div class="input-group">
                     <button id="button" type="submit" value="submit" name="submit" class="user-form-btn" style="cursor: pointer;">Submit</button>

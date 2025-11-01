@@ -6,11 +6,22 @@
     $error_message = "";
 
 
-    $sql = "SELECT `drill_id`, `name`, `has_table_diagram` FROM `drills` WHERE `published` = 1 ORDER BY `drill_id` DESC;";
-    $result = mysqli_query($conn, $sql);
-    if(!$result)
+    // Fetch published drills (Secure)
+    $stmt = $conn->prepare("SELECT `drill_id`, `name`, `has_table_diagram` FROM `drills` WHERE `published` = 1 ORDER BY `drill_id` DESC");
+    
+    if(!$stmt)
     {
-        $error_message = "Could not connect to database. Please try again later.";
+        $error_message = "Could not prepare database query. Please try again later.";
+    }
+    else
+    {
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if(!$result)
+        {
+            $error_message = "Could not connect to database. Please try again later.";
+        }
     }
 ?>
 
@@ -59,29 +70,28 @@
                             Drill Name
                         </div>
                     </div>
-                    <?php $row = mysqli_fetch_assoc($result); ?>
-                    <?php while ($row): ?>
-                        <?php echo '<a href="/home/drills/drill_details.php?drill_id=' . $row['drill_id'] . '">'; ?>
+                    <?php while ($row = $result->fetch_assoc()): ?>
+                        <?php echo '<a href="/home/drills/drill_details.php?drill_id=' . htmlspecialchars($row['drill_id']) . '">'; ?>
                         <div class="drill_row">
                             <div class="drill_num">
-                                <?php echo $row['drill_id']; ?>
+                                <?php echo htmlspecialchars($row['drill_id']); ?>
                             </div>
                             <div class="table_diagram">
                                 <?php if($row['has_table_diagram']): ?>
-                                    <?php echo '<img src="/home/drills/diagrams/' . $row['drill_id'] . '.png">'; ?>
+                                    <?php echo '<img src="/home/drills/diagrams/' . htmlspecialchars($row['drill_id']) . '.png">'; ?>
                                 <?php endif; ?>
                             </div>
                             <div class="drill_name">
-                                <?php echo $row['name']; ?>
+                                <?php echo htmlspecialchars($row['name']); ?>
                             </div>
                         </div>
                         <?php echo '</a>'; ?>
-                        <?php $row = mysqli_fetch_assoc($result); ?>
                     <?php endwhile; ?>
                 </div>
+                <?php $stmt->close(); ?>
             <?php else: ?>
                 <div class="ueser-form-error" style="width: 600px;">
-                    <?php echo $error_message; ?>
+                    <?php echo htmlspecialchars($error_message); ?>
                 </div>
             <?php endif; ?>
         </main>
