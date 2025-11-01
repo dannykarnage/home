@@ -9,14 +9,21 @@
 
         include('/home/users/web/b2283/ipg.stinttrackercom/home/db_files/connection.php');
 
-        $sql = "SELECT verified, vkey FROM users WHERE verified = 0 AND vkey = '$vkey' LIMIT 1;";
-        $result = mysqli_query($conn, $sql);
+        // Check for unverified account with vkey (using prepared statements)
+        $stmt_unverified = $conn->prepare("SELECT verified, vkey FROM users WHERE verified = 0 AND vkey = ? LIMIT 1");
+        $stmt_unverified->bind_param("s", $vkey);
+        $stmt_unverified->execute();
+        $result_unverified = $stmt_unverified->get_result();
 
-        if(mysqli_num_rows($result) != 1)
+        if($result_unverified->num_rows != 1)
         {
-            $sql = "SELECT verified, vkey FROM users WHERE verified = 1 AND vkey = '$vkey' LIMIT 1;";
-            $result = mysqli_query($conn, $sql);
-            if(mysqli_num_rows($result) == 1)
+            // Check for already verified account with vkey (using prepared statements)
+            $stmt_verified = $conn->prepare("SELECT verified, vkey FROM users WHERE verified = 1 AND vkey = ? LIMIT 1");
+            $stmt_verified->bind_param("s", $vkey);
+            $stmt_verified->execute();
+            $result_verified = $stmt_verified->get_result();
+            
+            if($result_verified->num_rows == 1)
             {
                 $outcome = "This account has already been verified.";
             }
@@ -24,14 +31,15 @@
             {
                 $outcome = "Could not locate that account. Please try again.";
             }
+            $stmt_verified->close();
         }
         else
         {
-            //validate the email;
-            $sql = "UPDATE users SET verified = 1 WHERE vkey = '$vkey' LIMIT 1;"; 
-            $result = mysqli_query($conn, $sql);
-            // $sql = "SELECT verified, vkey FROM accounts WHERE verified = 0 AND vkey = '$vkey' LIMIT 1;";
-            // $result = mysqli_query($conn, $sql);
+            // Validate and update the email (using prepared statements)
+            $stmt_update = $conn->prepare("UPDATE users SET verified = 1 WHERE vkey = ? LIMIT 1"); 
+            $stmt_update->bind_param("s", $vkey);
+            $result = $stmt_update->execute();
+            $stmt_update->close();
 
             if($result)
             {
@@ -39,9 +47,10 @@
             }
             else
             {
-                $outcome = "DB error: " . mysqli_error($conn);
+                $outcome = "DB error: " . $conn->error;
             }
         }
+        $stmt_unverified->close();
     }
     else
     {

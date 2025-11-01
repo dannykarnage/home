@@ -13,38 +13,45 @@
     }
     elseif($_SERVER['REQUEST_METHOD'] == "POST")
     {
+        // No need for mysqli_real_escape_string or md5() here as we use prepared statements and password_verify()
         $username = trim($_POST['username']);
         $password = trim($_POST['password']);
 
         if(!empty($username) && !empty($password))
         {
-            $username = mysqli_real_escape_string($conn, $username);
-            $password = mysqli_real_escape_string($conn, $password);
-            $password = md5($password);
+            // 1. Check for verified user status and fetch stored hash (using prepared statements)
+            $stmt = $conn->prepare("SELECT `password`, `password_reset_required` FROM `users` WHERE `username` = ? AND `verified` = 1 limit 1");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+            $result = $stmt->get_result();
 
-            $sql = "SELECT `username`, `password`, `verified`, `password_reset_required` FROM `users` WHERE `users`.`username` = '$username' AND `users`.`verified` = 1 limit 1;";
-            $result = mysqli_query($conn, $sql);
-
-            if($result && mysqli_num_rows($result) == 1)
+            if($result && $result->num_rows == 1)
             {
-                $user_data = mysqli_fetch_assoc($result);
+                $user_data = $result->fetch_assoc();
+
                 if($user_data['password_reset_required'] == 1)
                 {
                     $login_error = "The password on that account has been disabled. Please click on the <b>Having Trouble?</b> link below to request your password be reset.";
                 }
-                elseif($user_data['password'] === $password)
+                // *** CRITICAL SECURITY FIX: Use password_verify() instead of md5() comparison ***
+                elseif(password_verify($password, $user_data['password']))
                 {
-                    $_SESSION['username'] = $user_data['username'];
+                    $_SESSION['username'] = $username; // Use the cleaned username
                     header("Location: /home/index.php");
                     die;
                 }
             }
+            $stmt->close();
+            
             if(empty($login_error))
             {
-                $sql = "SELECT `username`, `password`, `verified` FROM `users` WHERE `users`.`username` = '$username' AND `users`.`verified` = 0 limit 1;";
-                $result = mysqli_query($conn, $sql);
+                // 2. If login failed, check if the unverified user exists to provide a specific error message (using prepared statements)
+                $stmt = $conn->prepare("SELECT `username` FROM `users` WHERE `username` = ? AND `verified` = 0 limit 1");
+                $stmt->bind_param("s", $username);
+                $stmt->execute();
+                $result = $stmt->get_result();
 
-                if($result && mysqli_num_rows($result) == 1)
+                if($result && $result->num_rows == 1)
                 {
                     $login_error = "That account has not yet been verified. Please click the link in the verification email to verify your account before logging in.";
                 }
@@ -52,6 +59,7 @@
                 {
                     $login_error = "Incorrect password or user not found.";
                 }
+                $stmt->close();
             }
         }
         else

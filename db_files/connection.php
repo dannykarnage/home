@@ -1,9 +1,21 @@
 <?php
-    $dbhost="stinttrackercom.ipagemysql.com";
-    $dbuser="pptadm1234";
-    $dbpass="Eddie&Ella12";
-    if(!$conn = mysqli_connect($dbhost, $dbuser, $dbpass)) {
-        die(mysqli_connect_error());
+    // CRITICAL: Database credentials should ideally be loaded from environment variables
+    // or a configuration file outside the web root for better security.
+    $dbhost = "stinttrackercom.ipagemysql.com";
+    $dbuser = "pptadm1234";
+    $dbpass = "Eddie&Ella12";
+    $dbname = "poolpracticetracker";
+
+    // Initialize $conn using Object-Oriented mysqli
+    $conn = new mysqli($dbhost, $dbuser, $dbpass, $dbname);
+
+    // Check connection
+    if ($conn->connect_error) {
+        // Log the error detail internally, but only show a generic message to the user
+        error_log("Connection failed: " . $conn->connect_error);
+        die("Database connection failed. Please try again later.");
     }
-    mysqli_select_db($conn, 'poolpracticetracker');
+
+    // Set character set to UTF-8 for security and compatibility
+    $conn->set_charset("utf8mb4");
 ?>

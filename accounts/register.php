@@ -21,16 +21,14 @@
     {
         if(isset($_POST['submit']))
         {            
+            // Note: The /home/db_files/connection.php must be included first for $conn to be defined.
             include("/home/users/web/b2283/ipg.stinttrackercom/home/db_files/connection.php");
-            $username = mysqli_real_escape_string($conn, $_POST['username']);
-            $email = mysqli_real_escape_string($conn, $_POST['email']);
-            $password_1 = mysqli_real_escape_string($conn, $_POST['password_1']);
-            $password_2 = mysqli_real_escape_string($conn, $_POST['password_2']);
-            
-            $username = trim($username);
-            $email = trim($email);
-            $password_1 = trim($password_1);
-            $password_2 = trim($password_2);
+
+            // No need for mysqli_real_escape_string anymore, as prepared statements handle escaping.
+            $username = trim($_POST['username']);
+            $email = trim($_POST['email']);
+            $password_1 = trim($_POST['password_1']);
+            $password_2 = trim($_POST['password_2']);
 
             if(empty($username))
             {
@@ -79,48 +77,52 @@
                 }
             }
 
+            // Check if username already exists (using prepared statements)
             if (count($errors) == 0)
             {
-                $sql = "SELECT * FROM `users` WHERE `users`.`username` LIKE '$username'";
-                $result = mysqli_query($conn, $sql);
-                if($result)
+                $stmt = $conn->prepare("SELECT COUNT(*) FROM `users` WHERE `username` = ?");
+                $stmt->bind_param("s", $username);
+                $stmt->execute();
+                $stmt->bind_result($count);
+                $stmt->fetch();
+                $stmt->close();
+                
+                if($count > 0)
                 {
-                    if(mysqli_num_rows($result) > 0)
-                    {
-                        array_push($errors, "User already exists");
-                    }
-                }
-                else
-                {
-                    array_push($errors, "Trouble with registering username. Please try again later or use the 'Contact Us' form to contact a site admin.");
+                    array_push($errors, "User already exists");
                 }
             }
 
+            // Check if email already exists (using prepared statements)
             if (count($errors) == 0)
             {
-                $sql = "SELECT * FROM `users` WHERE `users`.`email` LIKE '$email'";
-                $result = mysqli_query($conn, $sql);
-                if($result)
+                $stmt = $conn->prepare("SELECT COUNT(*) FROM `users` WHERE `email` = ?");
+                $stmt->bind_param("s", $email);
+                $stmt->execute();
+                $stmt->bind_result($count);
+                $stmt->fetch();
+                $stmt->close();
+
+                if($count > 0)
                 {
-                    if(mysqli_num_rows($result) > 0)
-                    {
-                        array_push($errors, "A user with that email address already exists.");
-                    }
-                }
-                else
-                {
-                    array_push($errors, "Trouble with registering email address. Please try again later or use the 'Contact Us' form to contact a site admin.");
+                    array_push($errors, "A user with that email address already exists.");
                 }
             }
 
             //were there any errors?
             if(count($errors) == 0) {
-                $password = md5($password_1); //encrypt password before storing in database
-                //echo '<br><br><br><br><br><br>' . $password_1 . '     ' . $password;  //this liine is for troubleshooting - comment out for publication
+                // *** CRITICAL SECURITY FIX: Use password_hash() instead of md5() ***
+                $password = password_hash($password_1, PASSWORD_DEFAULT);
+                
+                // Remove the debug echo line for security.
+                
                 $vkey = md5(time().$username);
-                $sql = "INSERT INTO users (`username`, `email`, `password`, `vkey`) VALUES ('$username', '$email', '$password', '$vkey');";
-                //echo $sql . '<br>';  //this line is for troubleshooting - comment out for pulication
-                $result = mysqli_query($conn, $sql);
+
+                // Insert new user (using prepared statements)
+                $stmt = $conn->prepare("INSERT INTO users (`username`, `email`, `password`, `vkey`) VALUES (?, ?, ?, ?)");
+                $stmt->bind_param("ssss", $username, $email, $password, $vkey);
+                $result = $stmt->execute();
+                $stmt->close();
 
                 if($result)
                 {

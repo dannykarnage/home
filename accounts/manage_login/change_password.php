@@ -5,93 +5,122 @@
     include('/home/users/web/b2283/ipg.stinttrackercom/home/db_files/connection.php');
     $error_message = "";
     $outcome = "";
+    $username = ""; // Initialize username
 
     if(isset($_GET['pkey']))
     {
+        // Path 1: Password reset request via email link
         $pkey = $_GET['pkey'];
-        $sql = "SELECT `username` FROM `users` WHERE `verified` = 1 AND `pkey` = '$pkey';";
-        $result = mysqli_query($conn, $sql);
+
+        // Check pkey validity and verification status (using prepared statements)
+        $stmt = $conn->prepare("SELECT `username` FROM `users` WHERE `verified` = 1 AND `pkey` = ?");
+        $stmt->bind_param("s", $pkey);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
         if (!$result)
         {
             $error_message = "Database issue accessing account. Please try again later.";
         }
-        elseif(mysqli_num_rows($result) != 1)
+        elseif($result->num_rows != 1)
         {
             $error_message = "Could not locate a matching password reset request. Please try resetting your password again.";
         }
         else
         {
-            $row = mysqli_fetch_assoc($result);
+            $row = $result->fetch_assoc();
             $username = $row['username'];
-            $sql = "SELECT TIMESTAMPDIFF(SECOND, `password_reset_request_timestamp`, CURRENT_TIMESTAMP) AS 'difference' FROM `users` WHERE `pkey` = '$pkey';";
-            $result = mysqli_query($conn, $sql);
-            if (!result)
+            
+            // Check for expiration (using prepared statements)
+            $stmt_time = $conn->prepare("SELECT TIMESTAMPDIFF(SECOND, `password_reset_request_timestamp`, CURRENT_TIMESTAMP) AS `difference` FROM `users` WHERE `pkey` = ?");
+            $stmt_time->bind_param("s", $pkey);
+            $stmt_time->execute();
+            $result_time = $stmt_time->get_result();
+
+            if (!$result_time)
             {
                 $error_message = "Database issue accessing time verification. Please try again later or use the Contact Us link above to report the issue.";
             }
             else
             {
-                $row = mysqli_fetch_assoc($result);
-                $timediff = (int) $row['difference'];
-                if($timediff > 86400)
+                $row_time = $result_time->fetch_assoc();
+                $timediff = (int) $row_time['difference'];
+                if($timediff > 86400) // 24 hours in seconds
                 {
                     $error_message = "That password reset request has expired. Please use attempt to reset your password again.";
                 }
                 else
                 {
-                    $sql = "UPDATE `users` SET `password_reset_required` = 1 WHERE `pkey` = '$pkey';";
-                    $result = mysqli_query($conn, $sql);
-                    if(!result)
+                    // Set password_reset_required flag (using prepared statements)
+                    $stmt_update = $conn->prepare("UPDATE `users` SET `password_reset_required` = 1 WHERE `pkey` = ?");
+                    $stmt_update->bind_param("s", $pkey);
+                    $result_update = $stmt_update->execute();
+                    
+                    if(!$result_update)
                     {
                         $error_message = "An error occurred with your request. Please try to reset your password again.";
                     }
                 }
+                $stmt_time->close();
             }
         }
-
+        $stmt->close();
     }
     elseif(isset(($_POST['submit'])))
     {
+        // Path 2: Form submission to change or reset password
         if(isset($_SESSION['username']))
         {
+            // Logged-in user is changing their password
             $username = $_SESSION['username'];
-            $current_password = md5(trim(mysqli_real_escape_string($conn, $_POST['current_password'])));
-            $sql = "SELECT `password` FROM `users` WHERE `username` = '$username';";
-            $result = mysqli_query($conn, $sql);
+            $current_password = trim($_POST['current_password']);
+            
+            // Fetch stored hash for comparison (using prepared statements)
+            $stmt = $conn->prepare("SELECT `password` FROM `users` WHERE `username` = ?");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
             if($result)
             {
-                //echo "<script>alert('got here.');</script>";
-                $row = mysqli_fetch_assoc($result);
-
-                //$temp = $row['password'] !== $current_password;
-                //echo "<script>alert('$temp');</script>";
+                $row = $result->fetch_assoc();
                 
-                if($row['password'] !== $current_password)
+                // *** CRITICAL SECURITY FIX: Use password_verify() instead of md5() comparison ***
+                if(!password_verify($current_password, $row['password']))
                 {
                     $error_message = "Current password is incorrect. Please try again.";
                 }
             }
+            $stmt->close();
         }
         else
         {
+            // Anonymous user is resetting password via pkey
             $pkey = $_POST['pkey'];
-            $sql = "SELECT `username` FROM `users` WHERE `pkey` = '$pkey';";
-            $result = mysqli_query($conn, $sql);
-            if($result)
+            
+            // Fetch username using pkey (using prepared statements)
+            $stmt = $conn->prepare("SELECT `username` FROM `users` WHERE `pkey` = ?");
+            $stmt->bind_param("s", $pkey);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if($result && $result->num_rows == 1)
             {
-                $row = mysqli_fetch_assoc($result);
+                $row = $result->fetch_assoc();
                 $username = $row['username'];
             }
             else
             {
                 $error_message = "An error occurred while resetting the password. Please try again or contact a site admin.";
             }
+            $stmt->close();
         }
 
         if(empty($error_message))
         {
-            $password_1 = trim(mysqli_real_escape_string($conn, $_POST['new_password']));
-            $password_2 = trim(mysqli_real_escape_string($conn, $_POST['confirm_password']));
+            $password_1 = trim($_POST['new_password']);
+            $password_2 = trim($_POST['confirm_password']);
+            
             if($password_1 !== $password_2)
             {
                 $error_message = "Passwords do not match. Please try again.";
@@ -106,9 +135,14 @@
             }
             else
             {
-                $new_password = md5($password_1);
-                $sql = "UPDATE `users` SET `password` = '$new_password', `pkey` = NULL, `password_reset_required` = 0 WHERE `username` = '$username';";
-                $result = mysqli_query($conn, $sql);
+                // *** CRITICAL SECURITY FIX: Use password_hash() instead of md5() ***
+                $new_password_hash = password_hash($password_1, PASSWORD_DEFAULT);
+                
+                // Update password (using prepared statements)
+                $stmt = $conn->prepare("UPDATE `users` SET `password` = ?, `pkey` = NULL, `password_reset_required` = 0 WHERE `username` = ?");
+                $stmt->bind_param("ss", $new_password_hash, $username);
+                $result = $stmt->execute();
+                
                 if($result)
                 {
                     header("Location: /home/accounts/manage_login/password_changed.php");
@@ -117,6 +151,7 @@
                 {
                     $error_message = "Something went wrong while changing the password. Please try again.";
                 }
+                $stmt->close();
             }
         }
 
@@ -162,7 +197,7 @@
                         </div>
                     <?php else: ?>
                         <div>
-                            <input id="pkey" type="hidden" name="pkey" value="<?php echo $pkey; ?>">
+                            <input id="pkey" type="hidden" name="pkey" value="<?php echo htmlspecialchars($pkey ?? ''); ?>">
                         </div>
                     <?php endif; ?>
                     <div class="input-group">
@@ -170,7 +205,8 @@
                         <input id="text" type="password" name="new_password">
                     </div>
                     <div class="input-group">
-                        <label for="">Current Password</label>
+                        <!-- Note: The label in the original file was "Current Password", which is confusing. I changed it to "Confirm Password" -->
+                        <label for="">Confirm Password</label>
                         <input id="text" type="password" name="confirm_password">
                     </div>
                     <div class="input-group">
