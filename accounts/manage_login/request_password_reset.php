@@ -52,40 +52,48 @@
 
         if(empty($error_message))
         {
-            $pkey = md5(time() . $username); // pkey is used as a temporary non-user-supplied key
-            
-            // Update pkey and timestamp (Secure)
-            $stmt = $conn->prepare("UPDATE `users` SET `pkey` = ?, `password_reset_request_timestamp` = CURRENT_TIMESTAMP WHERE `username` = ? LIMIT 1");
-            $stmt->bind_param("ss", $pkey, $username);
-            $result = $stmt->execute();
-            $stmt->close();
-            
-            if ($result)
-            {
-                //send email
-                $subject = "Password reset request.";
-                include('/home/users/web/b2283/ipg.stinttrackercom/home/accounts/manage_login/password_reset_email.php');
-                $headers = "From: donotreply@poolpracticetracker.com \r\n";
-                $headers .= "MIME-Version: 1.0" . "\r\n";
-                $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-                
-                // Note: It's important to check the mail function's return value for success
-                $success = mail($email,$subject,$email_message,$headers);
+            // *** SECURITY FIX: Use a cryptographically secure random string instead of md5(time().$username) ***
+            try {
+                $pkey = bin2hex(random_bytes(16)); // Generates a 32-character hex token
+            } catch (Exception $e) {
+                $error_message = "Internal error generating security token.";
+                error_log("Security token generation failed: " . $e->getMessage());
+            }
 
-                if ($success)
+            if(empty($error_message)) {
+                // Update pkey and timestamp (Secure)
+                $stmt = $conn->prepare("UPDATE `users` SET `pkey` = ?, `password_reset_request_timestamp` = CURRENT_TIMESTAMP WHERE `username` = ? LIMIT 1");
+                $stmt->bind_param("ss", $pkey, $username);
+                $result = $stmt->execute();
+                $stmt->close();
+                
+                if ($result)
                 {
-                    header("Location: /home/accounts/manage_login/password_reset_requested.php");
-                    die();
+                    //send email
+                    $subject = "Password reset request.";
+                    include('/home/users/web/b2283/ipg.stinttrackercom/home/accounts/manage_login/password_reset_email.php');
+                    $headers = "From: donotreply@poolpracticetracker.com \r\n";
+                    $headers .= "MIME-Version: 1.0" . "\r\n";
+                    $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
+                    
+                    // Note: It's important to check the mail function's return value for success
+                    $success = mail($email,$subject,$email_message,$headers);
+
+                    if ($success)
+                    {
+                        header("Location: /home/accounts/manage_login/password_reset_requested.php");
+                        die();
+                    }
+                    else
+                    {
+                        $error_message = "Unable to process your request. Please try again later.";
+                    }
                 }
                 else
                 {
-                    $error_message = "Unable to process your request. Please try again later.";
+                    $error_message = "Database error during request. Please try again later. Error: " . $conn->error;
                 }
             }
-            else
-            {
-                $error_message = "Database error during request. Please try again later. Error: " . $conn->error;
-            }        
         }
     }
 ?>

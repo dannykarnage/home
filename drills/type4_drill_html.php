@@ -14,24 +14,24 @@
                             <?php if($odd): ?>
                                 <?php $odd = false; ?>
                                 <th class="date-column-odd">
-                                    <?php echo substr($data["timestamp"][$i], 0, 10); ?>
+                                    <?php echo htmlspecialchars(substr($data["timestamp"][$i], 0, 10)); ?>
                                 </th>
                                 <th class="data-column-odd">
-                                    <?php echo $data["score"][$i]; ?>
+                                    <?php echo htmlspecialchars($data["score"][$i]); ?>
                                 </th>
                                 <th class="data-column-odd">
-                                    <?php echo $data["pass"][$i]; ?>
+                                    <?php echo htmlspecialchars($data["pass"][$i]); ?>
                                 </th>
                             <?php else: ?>
                                 <?php $odd = true; ?>
                                 <th class="date-column-even">
-                                    <?php echo substr($data["timestamp"][$i], 0, 10); ?>
+                                    <?php echo htmlspecialchars(substr($data["timestamp"][$i], 0, 10)); ?>
                                 </th>
                                 <th class="data-column-even">
-                                    <?php echo $data["score"][$i]; ?>
+                                    <?php echo htmlspecialchars($data["score"][$i]); ?>
                                 </th>
                                 <th class="data-column-even">
-                                    <?php echo $data["pass"][$i]; ?>
+                                    <?php echo htmlspecialchars($data["pass"][$i]); ?>
                                 </th>
                             <?php endif; ?>
                         </tr>
@@ -55,24 +55,37 @@
 
                     data.addRows([
                         <?php
+                            $minDateStr = '';
+                            $maxDateStr = '';
+                            $dataRows = [];
+
                             for($i = 0; $i < count($data["timestamp"]); $i++)
                             {
+                                $timestamp = $data["timestamp"][$i];
+                                $score = $data["score"][$i];
+                                
+                                // *** SECURITY FIX: JSON encode the string literal for safe JS embedding ***
                                 if($data["pass"][$i] === "Pass")
                                 {
-                                    $style = "'point { size: 10; shape-type: star; fill-color: magenta; }'";
+                                    $style = json_encode('point { size: 10; shape-type: star; fill-color: magenta; }');
                                 }
                                 else
                                 {
                                     $style = "null";
                                 }
-                                $date_year = intval(substr($data["timestamp"][$i], 0, 4));
-                                $date_month = intval(substr($data["timestamp"][$i], 5, 2));
-                                $date_day = intval(substr($data["timestamp"][$i], 8, 2));
-                                $date_hour = intval(substr($data["timestamp"][$i], 11, 2));
-                                $date_minute = intval(substr($data["timestamp"][$i], 14, 2));
-                                $date_second = intval(substr($data["timestamp"][$i], 17, 2));
+
+                                $date_year = intval(substr($timestamp, 0, 4));
+                                $date_month = intval(substr($timestamp, 5, 2));
+                                $date_day = intval(substr($timestamp, 8, 2));
+                                $date_hour = intval(substr($timestamp, 11, 2));
+                                $date_minute = intval(substr($timestamp, 14, 2));
+                                $date_second = intval(substr($timestamp, 17, 2));
                                 $datestr = $date_year . ', ' . ($date_month - 1) . ', ' . $date_day . ', ' . $date_hour . ', ' . $date_minute . ', ' . $date_second;
-                                echo "[new Date(" . $datestr . "), " . $data["score"][$i] . ", " . $style . "]";
+
+                                // *** SECURITY FIX: Use floatval() for score ***
+                                $dataRows[] = "[new Date(" . $datestr . "), " . floatval($score) . ", " . $style . "]";
+
+                                // Min/Max date logic (retained for chart window size)
                                 if(count($data["timestamp"]) == 1)
                                 {
                                     $minDateStr = $date_year . ', ' . ($date_month - 1) . ', ' . $date_day . ', ' . $date_hour . ', ' . $date_minute . ', ' . ($date_second - 1);
@@ -83,18 +96,15 @@
                                     if($i == 0)
                                     {
                                         $minDateStr = $datestr;
-                                        echo ", ";
                                     }
                                     elseif($i == (count($data["timestamp"]) - 1))
                                     {
                                         $maxDateStr = $datestr;
                                     }
-                                    else
-                                    {
-                                        echo ", ";
-                                    }
                                 }
                             }
+                            // Echo data rows
+                            echo implode(", ", $dataRows);
                         ?>
                     ]);
 
@@ -109,8 +119,9 @@
                         },
                         hAxis: {
                             viewWindow: {
-                                min: new Date(<?php echo $minDateStr; ?>),
-                                max: new Date(<?php echo $maxDateStr; ?>)
+                                // *** SECURITY FIX: JSON encode date strings for safe embedding ***
+                                min: new Date(<?php echo json_encode($minDateStr); ?>),
+                                max: new Date(<?php echo json_encode($maxDateStr); ?>)
                             },
                             gridlines: {
                                 count: -1,
@@ -128,7 +139,8 @@
                         },
                         vAxis: {
                             minValue: 0,
-                            maxValue: <?php echo $drill_details['out_of_num']; ?>
+                            // *** SECURITY FIX: JSON encode the numeric value for safe embedding ***
+                            maxValue: <?php echo json_encode(floatval($drill_details['out_of_num'])); ?>
                         }
                     };
                     
