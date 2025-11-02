@@ -1,11 +1,14 @@
 <?php
-    // CRITICAL SECURITY WARNING:
-    // Database credentials are hardcoded and stored in a web-accessible directory.
-    // They MUST be moved to environment variables or a configuration file outside the web root.
-    $dbhost = "stinttrackercom.ipagemysql.com";
-    $dbuser = "pptadm1234";
-    $dbpass = "Eddie&Ella12";
-    $dbname = "poolpracticetracker";
+    $dbhost = getenv('DB_HOST');
+    $dbuser = getenv('PPT_DB_USER');
+    $dbpass = getenv('PPT_DB_PASS');
+    $dbname = getenv('PPT_DB_NAME');
+
+    // Check if credentials were loaded
+    if (!$dbhost || !$dbuser || !$dbpass || !$dbname) {
+        error_log("FATAL ERROR: One or more database environment variables are missing.");
+        die("Configuration error: Database credentials not found.");
+    }
 
     // Initialize $conn using Object-Oriented mysqli
     $conn = new mysqli($dbhost, $dbuser, $dbpass, $dbname);
