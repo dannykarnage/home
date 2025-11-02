@@ -4,7 +4,7 @@
     // They MUST be moved to environment variables or a configuration file outside the web root.
     $dbhost = "stinttrackercom.ipagemysql.com";
     $dbuser = "pptadm1234";
-    $dbpass = "Eddie&Ella12";
+    $dbpass = "pptIsDaBest1!";
     $dbname = "poolpracticetracker";
 
     // Initialize $conn using Object-Oriented mysqli
