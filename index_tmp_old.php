@@ -14,6 +14,8 @@
     </head>
     <body>
 
+        <?php include('/home/users/web/b2283/ipg.stinttrackercom/home/temps/header.php') ?>
+
         <main class="main-section">
             <!--<div class="page-title">
                 Pool Practice Tracker
@@ -30,20 +32,6 @@
                 </div>
                 <div class="left-section">
                     <img src="/home/images/pool-practice-drill.jpeg" class="three-image-grid-image">                    
-                </div>
-            </div>
-            <div class="text-grid-three-by-one">
-                <div class="left-section"> </div>
-                <div class="middle-section">
-                    <div class="left-justified-paragraph">
-                        <h2>
-                            Temporarily Offline!
-                        </h2>
-                        <p>
-                            PoolPracticeTracker.com is temporarily offline while we complete migrations to our
-                            new web host. Thank you for your patience. -PPT Admin 2025-11-3
-                        </p>
-                    </div>
                 </div>
             </div>
             <div class="centered-youtube-box">
