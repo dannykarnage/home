@@ -70,23 +70,6 @@
                             their skills progression over time by logging their scores on each drill during each practice
                             session.
                         </p>
-                        <p>
-                            As of our launch on December 16th, 2022, we have 16 practice drills available. We will be
-                            adding to these constantly, so come back often to view new drills as they become available!
-                        </p>
-                        <p>
-                            The full list of availabe drills can be viewed using the
-                            <a style="text-decoration: underline; color: inherit" href="/home/drills">
-                            Drills</a> link above.
-                        </p>
-                        <p>
-                            You'll need to
-                            <a style="text-decoration: underline; color: inherit" href="/home/accounts/login.php">
-                            login to your account</a> to be able to log your scores and keep track of your progress. If
-                            you don't have an account,
-                            <a style="text-decoration: underline; color: inherit" href="/home/accounts/register.php">
-                            create one here</a> and get started right away!
-                        </p>
                     </div>
                 </div>
                 <div class="right-section"> </div>
