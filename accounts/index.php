@@ -1,6 +1,7 @@
 <?php
 
     session_start();
+    
 
     include('/home/users/web/b2283/ipg.stinttrackercom/home/db_files/connection.php');
     include('/home/users/web/b2283/ipg.stinttrackercom/home/functions.php');
