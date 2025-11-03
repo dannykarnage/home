@@ -45,6 +45,7 @@
                         </p>
                     </div>
                 </div>
+                <div class="right-section"> </div>
             </div>
             <div class="centered-youtube-box">
                 <iframe
